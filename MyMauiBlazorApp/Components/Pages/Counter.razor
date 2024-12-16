@@ -1,0 +1,136 @@
+﻿@page "/counter"
+@using Azure.AI.FormRecognizer
+@using Microsoft.EntityFrameworkCore
+@using OpenAI
+@using OpenAI.Chat
+
+@inject AzureSettings AzureSettings
+@inject ApplicationDbContext _context
+@inject OpenAIClient openAIClient
+@inject FormRecognizerClient formRecognizerClient
+
+<h3>Upload Resume</h3>
+<InputFile OnChange="UploadResumes" Multiple="true" accept="application/pdf" />
+<button @onclick="FindBestFit">Find Best Fit</button>
+<ul>
+    @foreach (var resume in BestFitResumes)
+    {
+        <li>@resume.ResumeText (Similarity: @resume.Similarity)</li>
+    }
+</ul>
+
+
+@code {
+   private List<ResumeMatch> BestFitResumes = new List<ResumeMatch>();
+
+    private async Task UploadResumes(InputFileChangeEventArgs e)
+    {
+         foreach (var file in e.GetMultipleFiles())
+        {
+            try
+            {
+                 
+            using var stream = file.OpenReadStream();
+            var SeekStream = await MakeSeekableAsync(stream);
+            var extractedText = await ExtractTextFromResume(SeekStream);
+            var embeddings = await GenerateEmbeddings(extractedText);
+            await SaveResumeToDatabase(extractedText, embeddings);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+    }
+
+ private async Task FindBestFit()
+    {
+        try
+        {
+        var jobDescription = await _context.JobDescriptions.FirstOrDefaultAsync();
+        var query = @"
+            SELECT 
+                r.Id AS ResumeId, 
+                r.Text AS ResumeText,
+                jd.Id AS JobDescriptionId, 
+                VECTOR_DISTANCE(r.Embeddings, jd.Embeddings, 'COSINE') AS Similarity
+            FROM 
+                Resumes r, 
+                JobDescriptions jd
+            WHERE 
+                VECTOR_DISTANCE(r.Embeddings, jd.Embeddings, 'COSINE') >= 0.7
+            ORDER BY 
+                Similarity DESC";
+
+        BestFitResumes = await _context.ResumeMatches
+            .FromSqlRaw(query)
+            .ToListAsync();
+            
+            
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+    private async Task<Stream> MakeSeekableAsync(Stream stream)
+    {
+        if (stream.CanSeek)
+        {
+            return stream;
+        }
+
+        var memoryStream = new MemoryStream();
+        await stream.CopyToAsync(memoryStream);
+        memoryStream.Position = 0;
+        return memoryStream;
+    }
+    private async Task<string> ExtractTextFromResume(Stream stream)
+    {
+        var operation = await formRecognizerClient.StartRecognizeContentAsync(stream, new RecognizeContentOptions(){ ContentType = FormContentType.Pdf });
+        var result = await operation.WaitForCompletionAsync();
+        return string.Join(" ", result.Value.SelectMany(page => page.Lines.Select(line => line.Text)));
+    }
+
+    private async Task<float[]> GenerateEmbeddings(string text)
+    {
+   try {
+        ChatClient chatClient = openAIClient.GetChatClient("gpt-35-turbo");
+       var chatUpdates = chatClient.CompleteChatStreamingAsync(
+    [
+        new SystemChatMessage("You are a helpful assistant that talks like a pirate."),
+        new UserChatMessage("Does Azure OpenAI support customer managed keys?"),
+        new AssistantChatMessage("Yes, customer managed keys are supported by Azure OpenAI"),
+        new UserChatMessage("Do other Azure AI services support this too?")
+    ]);
+
+    await foreach(var chatUpdate in chatUpdates)
+    {
+        if (chatUpdate.Role.HasValue)
+        {
+            Console.Write($"{chatUpdate.Role} : ");
+        }
+        
+        foreach(var contentPart in chatUpdate.ContentUpdate)
+        {
+            Console.Write(contentPart.Text);
+        }
+    }
+    }
+    catch(Exception e)
+    {
+
+    }
+        var embeddingResponse = await openAIClient.GetEmbeddingClient("text-embedding-3-large")
+        .GenerateEmbeddingAsync(text);
+        
+        return embeddingResponse.Value.ToFloats().ToArray();
+    }
+
+    private async Task SaveResumeToDatabase(string text, float[] embeddings)
+    {
+        var resume = new Resumes { Text = text, Embeddings = embeddings };
+        _context.ResumesSet.Add(resume);
+        await _context.SaveChangesAsync();
+    }
+}
