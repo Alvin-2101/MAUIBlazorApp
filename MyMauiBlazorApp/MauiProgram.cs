@@ -29,13 +29,6 @@ public static class MauiProgram
 		// Add configuration settings
         var azureSettings = new AzureSettings
         {
-            OpenAIApiKey = "bqRGN3bJyGO7jjaWGbikhFzCp0k6h71HPKceOgbGgUyTT1gYvRI2JQQJ99ALACYeBjFXJ3w3AAAAACOG0t5k",
-            OpenAIEndpoint = "https://prasa-m4qyzdgh-eastus.cognitiveservices.azure.com/",
-			// OpenAIApiKey = "bqRGN3bJyGO7jjaWGbikhFzCp0k6h71HPKceOgbGgUyTT1gYvRI2JQQJ99ALACYeBjFXJ3w3AAAAACOG0t5k",
-			// OpenAIEndpoint = "https://prasa-m4qyzdgh-eastus.cognitiveservices.azure.com/openai/deployments/gpt-35-turbo/chat/completions?api-version=2024-08-01-preview",
-            FormRecognizerApiKey = "Dc5ujlFzD7Z1iZH2KmMsKs4aUaJRWsfx1Zy0O2nizc0NX2KDqidlJQQJ99ALACHYHv6XJ3w3AAALACOGVMWd",
-            FormRecognizerEndpoint = "https://gensdi.cognitiveservices.azure.com/",
-            SqlConnectionString = "Server=tcp:genssqlserver.database.windows.net,1433;Initial Catalog=SqlDBGenS;Persist Security Info=False;User ID=gensadmin;Password=Admin1234;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
         };
 
         builder.Services.AddSingleton(azureSettings);
